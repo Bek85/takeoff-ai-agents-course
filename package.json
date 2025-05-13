@@ -1,0 +1,28 @@
+{
+  "name": "takeoff-ai-agents-course",
+  "version": "1.0.0",
+  "description": "Takeoff AI Agents Course",
+  "main": "index.js",
+  "scripts": {
+    "intro": "tsx sections/intro/index.ts",
+    "memory": "tsx sections/memory/index.ts",
+    "tools": "tsx sections/tools/index.ts",
+    "planning": "tsx sections/planning/index.ts",
+    "loops": "tsx sections/loops/index.ts",
+    "multiagents": "tsx sections/multiagents/index.ts",
+    "integrations": "tsx sections/integrations/index.ts",
+    "db:generate": "npx drizzle-kit generate",
+    "db:migrate": "npx drizzle-kit migrate"
+  },
+  "author": "Mckay Wrigley",
+  "license": "MIT",
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "drizzle-kit": "^0.22.1",
+    "drizzle-orm": "^0.31.0",
+    "gpt-tokenizer": "^2.5.0",
+    "openai": "^4.68.0",
+    "postgres": "^3.4.4",
+    "tsx": "^4.19.1"
+  }
+}
