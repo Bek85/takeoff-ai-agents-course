@@ -1,68 +1,58 @@
 import dotenv from "dotenv";
 import OpenAI from "openai";
-import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
+import {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources";
 import * as readline from "readline";
+import fetch from "node-fetch";
 
 dotenv.config({ path: ".env.local" });
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-const MOCK_WEATHER_DATA: {
-  location: string;
-  temperature: string;
-  conditions: string;
-  wind: string;
-  humidity: string;
-}[] = [
-  {
-    location: "San Francisco, CA",
-    temperature: "70°F",
-    conditions: "Sunny",
-    wind: "5 mph",
-    humidity: "60%"
-  },
-  {
-    location: "New York City, NY",
-    temperature: "65°F",
-    conditions: "Partly Cloudy",
-    wind: "10 mph",
-    humidity: "55%"
-  },
-  {
-    location: "Phoenix, AZ",
-    temperature: "95°F",
-    conditions: "Sunny",
-    wind: "7 mph",
-    humidity: "20%"
-  },
-  {
-    location: "Dallas, TX",
-    temperature: "80°F",
-    conditions: "Clear",
-    wind: "8 mph",
-    humidity: "45%"
-  },
-  {
-    location: "Miami, FL",
-    temperature: "85°F",
-    conditions: "Scattered Thunderstorms",
-    wind: "12 mph",
-    humidity: "75%"
-  },
-  {
-    location: "Chicago, IL",
-    temperature: "60°F",
-    conditions: "Overcast",
-    wind: "15 mph",
-    humidity: "65%"
-  }
-];
+// Weather API key
+const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 
 const GREEN = "\x1b[32m";
 const BLUE = "\x1b[34m";
 const RESET = "\x1b[0m";
+
+// Function to get real weather data from WeatherAPI.com
+async function fetchWeatherData(location: string) {
+  try {
+    // Using the exact format from the example
+    const response = await fetch(
+      `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(
+        location
+      )}&aqi=no`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Weather API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Format the data to match our expected structure
+    return {
+      location: `${data.location.name}, ${data.location.region}`,
+      temperature: `${data.current.temp_c}°C`,
+      conditions: data.current.condition.text,
+      wind: `${data.current.wind_kph} kph`,
+      humidity: `${data.current.humidity}%`,
+      // Add more details from the rich response
+      feelsLike: `${data.current.feelslike_c}°C`,
+      uvIndex: data.current.uv,
+      updated: data.current.last_updated,
+    };
+  } catch (error) {
+    console.error("Error fetching weather data:", error);
+    return null;
+  }
+}
 
 async function main() {
   let conversationHistory: ChatCompletionMessageParam[] = [];
@@ -77,19 +67,20 @@ async function main() {
         properties: {
           location: {
             type: "string",
-            description: "The city and state, e.g. San Francisco, CA"
-          }
+            description:
+              "The city and state/country, e.g. San Francisco, CA or London, UK",
+          },
         },
-        required: ["location"]
-      }
-    }
+        required: ["location"],
+      },
+    },
   };
 
   const tools = [weatherTool];
 
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
   const askQuestion = (query: string): Promise<string> => {
@@ -106,7 +97,7 @@ async function main() {
       model: "gpt-4o-mini",
       messages: conversationHistory,
       tools: tools,
-      tool_choice: "auto"
+      tool_choice: "auto",
     });
 
     const message = response.choices[0].message;
@@ -115,20 +106,30 @@ async function main() {
       conversationHistory.push(message);
 
       const toolCallPromises = message.tool_calls.map(async (toolCall) => {
-        console.log(BLUE + `\nCalling function: ${toolCall.function.name}` + RESET);
+        console.log(
+          BLUE + `\nCalling function: ${toolCall.function.name}` + RESET
+        );
         const args = JSON.parse(toolCall.function.arguments);
 
         if (toolCall.function.name === "getWeather") {
-          console.log(GREEN + `\nGetting weather for: ${args.location}` + RESET);
-          const weatherData = MOCK_WEATHER_DATA.find((data) => data.location === args.location);
-          const result = weatherData ? JSON.stringify(weatherData) : "Weather data not found for this location.";
+          console.log(
+            GREEN + `\nGetting weather for: ${args.location}` + RESET
+          );
+
+          // Call the real weather API
+          const weatherData = await fetchWeatherData(args.location);
+
+          const result = weatherData
+            ? JSON.stringify(weatherData)
+            : "Weather data not found for this location.";
+
           console.log(GREEN + "Weather data:" + RESET);
           console.log(GREEN + result + "\n" + RESET);
 
           return {
             role: "tool",
             content: result,
-            tool_call_id: toolCall.id
+            tool_call_id: toolCall.id,
           } as ChatCompletionMessageParam;
         }
       });
@@ -139,13 +140,16 @@ async function main() {
 
       const finalResponse = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: conversationHistory
+        messages: conversationHistory,
       });
 
       const finalMessage = finalResponse.choices[0].message;
       if (finalMessage.content) {
         console.log("AI:", finalMessage.content);
-        conversationHistory.push({ role: "assistant", content: finalMessage.content });
+        conversationHistory.push({
+          role: "assistant",
+          content: finalMessage.content,
+        });
       }
     } else if (message.content) {
       console.log("AI:", message.content);
