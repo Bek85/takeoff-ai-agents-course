@@ -1,7 +1,10 @@
 import { config } from "dotenv";
 import { encode } from "gpt-tokenizer";
 import OpenAI from "openai";
-import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
+import {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources";
 import * as readline from "readline";
 import { db } from "../../db";
 import { memoriesTable } from "../../db/schema/memories-schema";
@@ -11,7 +14,7 @@ import { retrieveMemories } from "../../helpers/retrieve-memories";
 config({ path: ".env.local" });
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const GREEN = "\x1b[32m";
@@ -26,50 +29,54 @@ async function main() {
       type: "function",
       function: {
         name: "getMemory",
-        description: "Use this function to get a memory from your long term memory.",
+        description:
+          "Use this function to get a memory from your long term memory.",
         parameters: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "The query to search your long term memory."
-            }
+              description: "The query to search your long term memory.",
+            },
           },
-          required: ["query"]
-        }
-      }
+          required: ["query"],
+        },
+      },
     },
     {
       type: "function",
       function: {
         name: "saveMemory",
-        description: "Use this function to save a memory to your long term memory.",
+        description:
+          "Use this function to save a memory to your long term memory.",
         parameters: {
           type: "object",
           properties: {
             content: {
               type: "string",
-              description: "The content to save to your long term memory."
-            }
+              description: "The content to save to your long term memory.",
+            },
           },
-          required: ["content"]
-        }
-      }
-    }
+          required: ["content"],
+        },
+      },
+    },
   ];
 
   const tools = [...memoryTools];
 
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
   const askQuestion = (query: string): Promise<string> => {
     return new Promise((resolve) => rl.question(query, resolve));
   };
 
-  const handleToolCalls = async (message: OpenAI.Chat.Completions.ChatCompletionMessage) => {
+  const handleToolCalls = async (
+    message: OpenAI.Chat.Completions.ChatCompletionMessage
+  ) => {
     for (const toolCall of message.tool_calls) {
       const args = JSON.parse(toolCall.function.arguments);
       let result: any;
@@ -85,7 +92,7 @@ async function main() {
         await db.insert(memoriesTable).values({
           content: args.content,
           embedding: embedding,
-          tokenCount: tokenCount
+          tokenCount: tokenCount,
         });
         result = "Memory saved successfully.";
         console.log(GREEN + "\nSaved memory:" + RESET);
@@ -95,7 +102,7 @@ async function main() {
       const functionCallResultMessage: ChatCompletionMessageParam = {
         role: "tool",
         content: JSON.stringify(result),
-        tool_call_id: toolCall.id
+        tool_call_id: toolCall.id,
       };
 
       conversationHistory.push(message);
@@ -107,7 +114,7 @@ async function main() {
     const userInput = await askQuestion("You: ");
     if (userInput.toLowerCase() === "exit") break;
 
-    const systemPrompt = `You are a helpful assistant with access to long-term memory.
+    const systemPrompt = `Today's date is ${new Date().toLocaleDateString()}. earYou are a helpful assistant with access to long-term memory.
 
 You can use the getMemory function to retrieve relevant memories, and the saveMemory function to save new information to your long-term memory.
 
@@ -117,9 +124,12 @@ Use your memories to keep track of information about the user.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "system", content: systemPrompt }, ...conversationHistory],
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...conversationHistory,
+      ],
       tools: tools,
-      tool_choice: "auto"
+      tool_choice: "auto",
     });
 
     const message = response.choices[0].message;
@@ -129,13 +139,19 @@ Use your memories to keep track of information about the user.`;
 
       const finalResponse = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [{ role: "system", content: systemPrompt }, ...conversationHistory]
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...conversationHistory,
+        ],
       });
 
       const finalMessage = finalResponse.choices[0].message;
       if (finalMessage.content) {
         console.log("AI:", finalMessage.content);
-        conversationHistory.push({ role: "assistant", content: finalMessage.content });
+        conversationHistory.push({
+          role: "assistant",
+          content: finalMessage.content,
+        });
       }
     } else if (message.content) {
       console.log("AI:", message.content);
