@@ -1,7 +1,10 @@
 import dotenv from "dotenv";
 import { eq } from "drizzle-orm";
 import OpenAI from "openai";
-import { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources";
+import {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources";
 import * as readline from "readline";
 import { db } from "../../../db";
 import { customersTable } from "../../../db/schema/customers-schema";
@@ -9,26 +12,39 @@ import { customersTable } from "../../../db/schema/customers-schema";
 dotenv.config({ path: ".env.local" });
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const GREEN = "\x1b[32m";
 const BLUE = "\x1b[34m";
 const RESET = "\x1b[0m";
 
+async function getAllCustomersFromDB() {
+  return await db.query.customers.findMany();
+}
+
 async function getCustomerFromDB(email: string) {
   return await db.query.customers.findFirst({
-    where: eq(customersTable.email, email)
+    where: eq(customersTable.email, email),
   });
 }
 
-async function updateCustomerInDB(oldEmail: string, updates: Partial<typeof customersTable.$inferInsert>) {
-  await db.update(customersTable).set(updates).where(eq(customersTable.email, oldEmail));
+async function updateCustomerInDB(
+  oldEmail: string,
+  updates: Partial<typeof customersTable.$inferInsert>
+) {
+  await db
+    .update(customersTable)
+    .set(updates)
+    .where(eq(customersTable.email, oldEmail));
   return await getCustomerFromDB(updates.email || oldEmail);
 }
 
 async function issueRefundInDB(email: string, reason: string) {
-  await db.update(customersTable).set({ isRefunded: true, refundReason: reason }).where(eq(customersTable.email, email));
+  await db
+    .update(customersTable)
+    .set({ isRefunded: true, refundReason: reason })
+    .where(eq(customersTable.email, email));
   return await getCustomerFromDB(email);
 }
 
@@ -39,52 +55,66 @@ async function main() {
     {
       type: "function",
       function: {
+        name: "getAllCustomers",
+        description: "Gets all customers from the database.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "getCustomer",
-        description: "Gets the customer information for a given customer email.",
+        description:
+          "Gets the customer information for a given customer email.",
         parameters: {
           type: "object",
           properties: {
             email: {
               type: "string",
-              description: "The customer email."
-            }
+              description: "The customer email.",
+            },
           },
-          required: ["email"]
-        }
-      }
+          required: ["email"],
+        },
+      },
     },
     {
       type: "function",
       function: {
         name: "updateCustomer",
-        description: "Updates the customer's information. At least one field (besides oldEmail) must be provided.",
+        description:
+          "Updates the customer's information. At least one field (besides oldEmail) must be provided.",
         parameters: {
           type: "object",
           properties: {
             oldEmail: {
               type: "string",
-              description: "The customer's current email address."
+              description: "The customer's current email address.",
             },
             newEmail: {
               type: "string",
-              description: "The customer's new email address (optional)."
+              description: "The customer's new email address (optional).",
             },
             name: {
               type: "string",
-              description: "The customer's new name (optional)."
+              description: "The customer's new name (optional).",
             },
             isRefunded: {
               type: "boolean",
-              description: "Whether the customer has been refunded (optional)."
+              description: "Whether the customer has been refunded (optional).",
             },
             refundReason: {
               type: "string",
-              description: "The reason for the refund (optional)."
-            }
+              description: "The reason for the refund (optional).",
+            },
           },
-          required: ["oldEmail"]
-        }
-      }
+          required: ["oldEmail"],
+        },
+      },
     },
     {
       type: "function",
@@ -96,24 +126,24 @@ async function main() {
           properties: {
             email: {
               type: "string",
-              description: "The customer's email address."
+              description: "The customer's email address.",
             },
             reason: {
               type: "string",
-              description: "The reason for the refund."
-            }
+              description: "The reason for the refund.",
+            },
           },
-          required: ["email", "reason"]
-        }
-      }
-    }
+          required: ["email", "reason"],
+        },
+      },
+    },
   ];
 
   const tools = [...customerServiceTools];
 
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
   const askQuestion = (query: string): Promise<string> => {
@@ -131,7 +161,7 @@ async function main() {
       // model: "gpt-4o",
       messages: conversationHistory,
       tools: tools,
-      tool_choice: "auto"
+      tool_choice: "auto",
     });
 
     const message = response.choices[0].message;
@@ -140,24 +170,47 @@ async function main() {
       conversationHistory.push(message);
 
       const toolCallPromises = message.tool_calls.map(async (toolCall) => {
-        console.log(BLUE + `\nCalling function: ${toolCall.function.name}` + RESET);
+        console.log(
+          BLUE + `\nCalling function: ${toolCall.function.name}` + RESET
+        );
         const args = JSON.parse(toolCall.function.arguments);
 
+        if (toolCall.function.name === "getAllCustomers") {
+          console.log(GREEN + "Getting all customers..." + RESET);
+          const customers = await getAllCustomersFromDB();
+          const result = JSON.stringify(customers);
+          console.log(GREEN + "All customers:" + RESET);
+          console.log(GREEN + result + "\n" + RESET);
+
+          return {
+            role: "tool",
+            content: result,
+            tool_call_id: toolCall.id,
+          } as ChatCompletionMessageParam;
+        }
+
         if (toolCall.function.name === "getCustomer") {
-          console.log(GREEN + `\nGetting customer info for: ${args.email}` + RESET);
+          console.log(
+            GREEN + `\nGetting customer info for: ${args.email}` + RESET
+          );
           const customerData = await getCustomerFromDB(args.email);
-          const result = customerData ? JSON.stringify(customerData) : "Customer not found.";
+          const result = customerData
+            ? JSON.stringify(customerData)
+            : "Customer not found.";
           console.log(GREEN + "Customer data:" + RESET);
           console.log(GREEN + result + "\n" + RESET);
 
           return {
             role: "tool",
             content: result,
-            tool_call_id: toolCall.id
+            tool_call_id: toolCall.id,
           } as ChatCompletionMessageParam;
         } else if (toolCall.function.name === "issueRefund") {
           console.log(GREEN + `\nIssuing refund for: ${args.email}` + RESET);
-          const updatedCustomer = await issueRefundInDB(args.email, args.reason);
+          const updatedCustomer = await issueRefundInDB(
+            args.email,
+            args.reason
+          );
 
           if (updatedCustomer) {
             const result = `Refund issued to ${args.email}. Reason: ${args.reason}`;
@@ -166,7 +219,7 @@ async function main() {
             return {
               role: "tool",
               content: result,
-              tool_call_id: toolCall.id
+              tool_call_id: toolCall.id,
             } as ChatCompletionMessageParam;
           } else {
             const result = "Customer not found. Refund could not be issued.";
@@ -175,19 +228,26 @@ async function main() {
             return {
               role: "tool",
               content: result,
-              tool_call_id: toolCall.id
+              tool_call_id: toolCall.id,
             } as ChatCompletionMessageParam;
           }
         } else if (toolCall.function.name === "updateCustomer") {
-          console.log(GREEN + `\nUpdating customer info for: ${args.oldEmail}` + RESET);
+          console.log(
+            GREEN + `\nUpdating customer info for: ${args.oldEmail}` + RESET
+          );
 
           const updates: Partial<typeof customersTable.$inferInsert> = {};
           if (args.newEmail) updates.email = args.newEmail;
           if (args.name) updates.name = args.name;
-          if (args.isRefunded !== undefined) updates.isRefunded = args.isRefunded;
-          if (args.refundReason !== undefined) updates.refundReason = args.refundReason;
+          if (args.isRefunded !== undefined)
+            updates.isRefunded = args.isRefunded;
+          if (args.refundReason !== undefined)
+            updates.refundReason = args.refundReason;
 
-          const updatedCustomer = await updateCustomerInDB(args.oldEmail, updates);
+          const updatedCustomer = await updateCustomerInDB(
+            args.oldEmail,
+            updates
+          );
 
           if (updatedCustomer) {
             const result = `Customer ${args.oldEmail} updated successfully. New email: ${updatedCustomer.email}`;
@@ -196,7 +256,7 @@ async function main() {
             return {
               role: "tool",
               content: result,
-              tool_call_id: toolCall.id
+              tool_call_id: toolCall.id,
             } as ChatCompletionMessageParam;
           } else {
             const result = `Customer with email ${args.oldEmail} not found. Update failed.`;
@@ -205,7 +265,7 @@ async function main() {
             return {
               role: "tool",
               content: result,
-              tool_call_id: toolCall.id
+              tool_call_id: toolCall.id,
             } as ChatCompletionMessageParam;
           }
         }
@@ -217,13 +277,16 @@ async function main() {
 
       const finalResponse = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: conversationHistory
+        messages: conversationHistory,
       });
 
       const finalMessage = finalResponse.choices[0].message;
       if (finalMessage.content) {
         console.log("AI:", finalMessage.content);
-        conversationHistory.push({ role: "assistant", content: finalMessage.content });
+        conversationHistory.push({
+          role: "assistant",
+          content: finalMessage.content,
+        });
       }
     } else if (message.content) {
       console.log("AI:", message.content);
