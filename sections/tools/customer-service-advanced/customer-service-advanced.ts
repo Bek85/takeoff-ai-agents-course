@@ -66,11 +66,13 @@ async function main() {
           properties: {
             email: {
               type: "string",
-              description: "The customer's email address.",
+              description:
+                "The customer's email address. If it is not provided, the customer will not be added to the database.",
             },
             name: {
               type: "string",
-              description: "The customer's name.",
+              description:
+                "The customer's name. If it is not provided, the customer will not be added to the database.",
             },
           },
           required: ["email", "name"],
