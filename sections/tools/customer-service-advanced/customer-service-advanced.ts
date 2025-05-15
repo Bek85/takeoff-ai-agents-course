@@ -19,6 +19,10 @@ const GREEN = "\x1b[32m";
 const BLUE = "\x1b[34m";
 const RESET = "\x1b[0m";
 
+async function addCustomerToDB(customer: typeof customersTable.$inferInsert) {
+  await db.insert(customersTable).values(customer);
+}
+
 async function getAllCustomersFromDB() {
   return await db.query.customers.findMany();
 }
@@ -52,6 +56,27 @@ async function main() {
   let conversationHistory: ChatCompletionMessageParam[] = [];
 
   const customerServiceTools: ChatCompletionTool[] = [
+    {
+      type: "function",
+      function: {
+        name: "addCustomer",
+        description: "Adds a customer to the database.",
+        parameters: {
+          type: "object",
+          properties: {
+            email: {
+              type: "string",
+              description: "The customer's email address.",
+            },
+            name: {
+              type: "string",
+              description: "The customer's name.",
+            },
+          },
+          required: ["email", "name"],
+        },
+      },
+    },
     {
       type: "function",
       function: {
@@ -174,6 +199,23 @@ async function main() {
           BLUE + `\nCalling function: ${toolCall.function.name}` + RESET
         );
         const args = JSON.parse(toolCall.function.arguments);
+
+        if (toolCall.function.name === "addCustomer") {
+          console.log(GREEN + "Adding customer..." + RESET);
+          const newCustomer = await addCustomerToDB({
+            email: args.email,
+            name: args.name,
+          });
+
+          const result = `Customer ${args.email} added successfully.`;
+          console.log(GREEN + result + "\n" + RESET);
+
+          return {
+            role: "tool",
+            content: result,
+            tool_call_id: toolCall.id,
+          } as ChatCompletionMessageParam;
+        }
 
         if (toolCall.function.name === "getAllCustomers") {
           console.log(GREEN + "Getting all customers..." + RESET);
