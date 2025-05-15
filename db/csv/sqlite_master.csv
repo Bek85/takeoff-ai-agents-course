@@ -1,0 +1,35 @@
+#,type,name,tbl_name,rootpage,sql
+1,table,users,users,2,"CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    email TEXT UNIQUE,
+    password TEXT
+    )"
+2,index,sqlite_autoindex_users_1,users,3,
+3,table,addresses,addresses,4,"CREATE TABLE addresses (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    address TEXT
+    )"
+4,table,products,products,5,"CREATE TABLE products (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    price REAL
+    )"
+5,table,carts,carts,6,"CREATE TABLE carts (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    product_id INTEGER,
+    quantity INTEGER
+    )"
+6,table,orders,orders,7,"CREATE TABLE orders (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    created TEXT
+    )"
+7,table,order_products,order_products,8,"CREATE TABLE order_products (
+    id INTEGER PRIMARY KEY,
+    order_id INTEGER,
+    product_id INTEGER,
+    amount INTEGER
+    )"
