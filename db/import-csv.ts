@@ -3,10 +3,10 @@ import fs from "fs";
 import path from "path";
 import { db } from "./index";
 import { productsTable } from "./schema/products-schema";
-import { usersTable } from "./schema/users-schema";
 import { ordersTable, orderProductsTable } from "./schema/orders-schema";
 import { addressesTable } from "./schema/addresses-schema";
 import { cartsTable } from "./schema/carts-schema";
+import { customersTable } from "./schema/customers-schema";
 
 function parseAddress(address: string) {
   // Split the address into parts
@@ -60,7 +60,7 @@ async function importCSVData() {
     await db.delete(orderProductsTable);
     await db.delete(ordersTable);
     await db.delete(productsTable);
-    await db.delete(usersTable);
+    await db.delete(customersTable);
     console.log("Existing data cleared");
 
     // Import products
@@ -81,11 +81,11 @@ async function importCSVData() {
     console.log("Products imported successfully");
 
     // Import users
-    const usersData = fs.readFileSync(
+    const customersData = fs.readFileSync(
       path.join(__dirname, "csv", "users.csv"),
       "utf-8"
     );
-    const users = parse(usersData, {
+    const customers = parse(customersData, {
       columns: true,
       skip_empty_lines: true,
     }).map((row: any) => ({
@@ -95,11 +95,11 @@ async function importCSVData() {
       password: row.password,
     }));
 
-    await db.insert(usersTable).values(users);
-    console.log("Users imported successfully");
+    await db.insert(customersTable).values(customers);
+    console.log("Customers imported successfully");
 
     // Create a set of valid user IDs for faster lookup
-    const validUserIds = new Set(users.map((user) => user.id));
+    const validCustomerIds = new Set(customers.map((customer) => customer.id));
 
     // Import addresses
     const addressesData = fs.readFileSync(
@@ -112,7 +112,7 @@ async function importCSVData() {
     })
       .map((row: any) => {
         const userId = parseInt(row.user_id);
-        if (!validUserIds.has(userId)) {
+        if (!validCustomerIds.has(userId)) {
           console.warn(`Skipping address for non-existent user ID: ${userId}`);
           return null;
         }
@@ -156,7 +156,7 @@ async function importCSVData() {
     })
       .map((row: any) => {
         const userId = parseInt(row.user_id);
-        if (!validUserIds.has(userId)) {
+        if (!validCustomerIds.has(userId)) {
           console.warn(`Skipping cart for non-existent user ID: ${userId}`);
           return null;
         }
@@ -188,7 +188,7 @@ async function importCSVData() {
     })
       .map((row: any) => {
         const userId = parseInt(row.user_id);
-        if (!validUserIds.has(userId)) {
+        if (!validCustomerIds.has(userId)) {
           console.warn(`Skipping order for non-existent user ID: ${userId}`);
           return null;
         }

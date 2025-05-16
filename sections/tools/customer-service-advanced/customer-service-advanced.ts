@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import OpenAI from "openai";
 import {
   ChatCompletionMessageParam,
@@ -8,6 +8,7 @@ import {
 import * as readline from "readline";
 import { db } from "../../../db";
 import { customersTable } from "../../../db/schema/customers-schema";
+import { addressesTable } from "../../../db/schema/addresses-schema";
 
 dotenv.config({ path: ".env.local" });
 
@@ -23,8 +24,8 @@ async function addCustomerToDB(customer: typeof customersTable.$inferInsert) {
   await db.insert(customersTable).values(customer);
 }
 
-async function getAllCustomersFromDB() {
-  return await db.query.customers.findMany();
+async function getAllCustomersCountFromDB() {
+  return await db.select({ count: count() }).from(customersTable);
 }
 
 async function getCustomerFromDB(email: string) {
@@ -52,10 +53,48 @@ async function issueRefundInDB(email: string, reason: string) {
   return await getCustomerFromDB(email);
 }
 
+// First we need to find the user by their email, then we need to find the address by the user's id
+async function getUserAddress(email: string) {
+  const user = await db.query.customers.findFirst({
+    where: eq(customersTable.email, email),
+    columns: {
+      id: true,
+    },
+  });
+  if (!user) return null;
+  return await db.query.addresses.findFirst({
+    where: eq(addressesTable.userId, user.id),
+    columns: {
+      street: true,
+      city: true,
+      state: true,
+      zipCode: true,
+      country: true,
+    },
+  });
+}
+
 async function main() {
   let conversationHistory: ChatCompletionMessageParam[] = [];
 
   const customerServiceTools: ChatCompletionTool[] = [
+    {
+      type: "function",
+      function: {
+        name: "getUserAddress",
+        description: "Gets the user's address.",
+        parameters: {
+          type: "object",
+          properties: {
+            email: {
+              type: "string",
+              description: "The user's email address.",
+            },
+          },
+          required: ["email"],
+        },
+      },
+    },
     {
       type: "function",
       function: {
@@ -202,11 +241,28 @@ async function main() {
         );
         const args = JSON.parse(toolCall.function.arguments);
 
+        if (toolCall.function.name === "getUserAddress") {
+          console.log(GREEN + "Getting user address..." + RESET);
+          const address = await getUserAddress(args.email);
+          const result = address
+            ? JSON.stringify(address)
+            : "Address not found.";
+          console.log(GREEN + "User address:" + RESET);
+          console.log(GREEN + result + "\n" + RESET);
+
+          return {
+            role: "tool",
+            content: result,
+            tool_call_id: toolCall.id,
+          } as ChatCompletionMessageParam;
+        }
+
         if (toolCall.function.name === "addCustomer") {
           console.log(GREEN + "Adding customer..." + RESET);
           const newCustomer = await addCustomerToDB({
             email: args.email,
             name: args.name,
+            password: args.password,
           });
 
           const result = `Customer ${args.email} added successfully.`;
@@ -221,7 +277,7 @@ async function main() {
 
         if (toolCall.function.name === "getAllCustomers") {
           console.log(GREEN + "Getting all customers..." + RESET);
-          const customers = await getAllCustomersFromDB();
+          const customers = await getAllCustomersCountFromDB();
           const result = JSON.stringify(customers);
           console.log(GREEN + "All customers:" + RESET);
           console.log(GREEN + result + "\n" + RESET);
