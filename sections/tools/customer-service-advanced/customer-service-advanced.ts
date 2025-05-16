@@ -54,7 +54,7 @@ async function issueRefundInDB(email: string, reason: string) {
 }
 
 // First we need to find the user by their email, then we need to find the address by the user's id
-async function getUserAddress(email: string) {
+async function getCustomerAddress(email: string) {
   const user = await db.query.customers.findFirst({
     where: eq(customersTable.email, email),
     columns: {
@@ -81,14 +81,14 @@ async function main() {
     {
       type: "function",
       function: {
-        name: "getUserAddress",
-        description: "Gets the user's address.",
+        name: "getCustomerAddress",
+        description: "Gets the customer's address.",
         parameters: {
           type: "object",
           properties: {
             email: {
               type: "string",
-              description: "The user's email address.",
+              description: "The customer's email address.",
             },
           },
           required: ["email"],
@@ -241,13 +241,13 @@ async function main() {
         );
         const args = JSON.parse(toolCall.function.arguments);
 
-        if (toolCall.function.name === "getUserAddress") {
-          console.log(GREEN + "Getting user address..." + RESET);
-          const address = await getUserAddress(args.email);
+        if (toolCall.function.name === "getCustomerAddress") {
+          console.log(GREEN + "Getting customer address..." + RESET);
+          const address = await getCustomerAddress(args.email);
           const result = address
             ? JSON.stringify(address)
             : "Address not found.";
-          console.log(GREEN + "User address:" + RESET);
+          console.log(GREEN + "Customer address:" + RESET);
           console.log(GREEN + result + "\n" + RESET);
 
           return {

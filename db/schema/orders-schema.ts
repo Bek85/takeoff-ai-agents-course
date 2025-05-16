@@ -5,14 +5,14 @@ import {
   timestamp,
   foreignKey,
 } from "drizzle-orm/pg-core";
-import { usersTable } from "./users-schema";
+import { customersTable } from "./customers-schema";
 import { productsTable } from "./products-schema";
 
 export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
-    .references(() => usersTable.id),
+    .references(() => customersTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
